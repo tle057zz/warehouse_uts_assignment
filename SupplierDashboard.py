@@ -27,21 +27,32 @@ class SupplierDashboard:
         self.header.pack(pady=(0, 20))
 
         # Products Table
-        self.tree = ttk.Treeview(self.container, columns=("Name", "Price", "Stock", "Available"),
-                                 show="headings", selectmode="extended")
+        columns = ("Name", "Price", "Stock")
+        self.tree = ttk.Treeview(self.container, columns=columns, show="headings", selectmode="extended")
+
+        # Configure columns
         self.tree.heading("Name", text="Name")
         self.tree.heading("Price", text="Price")
         self.tree.heading("Stock", text="Stock")
-        self.tree.heading("Available", text="Available")
+
+        # Adjust column widths
+        self.tree.column("Name", width=200)
+        self.tree.column("Price", width=100)
+        self.tree.column("Stock", width=100)
+
         self.tree.pack(fill=X, pady=(0, 20))
+
+        # Add scrollbar
+        scrollbar = ttk.Scrollbar(self.container, orient=VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side=RIGHT, fill=Y)
 
         # Populate products from catalogue
         for product in self.cart.catalogue:
             self.tree.insert("", END, values=(
                 product.name,
                 f"${product.price:.2f}",
-                product.stock,
-                "Yes" if product.is_available() else "No"
+                product.stock
             ))
 
         # Buttons frame
@@ -75,15 +86,31 @@ class SupplierDashboard:
         dialog = Toplevel(self.root)
         dialog.title("Enter Quantity")
         dialog.resizable(False, False)
+        dialog.protocol("WM_DELETE_WINDOW", Utils.disable)
 
         container = Frame(dialog)
         container.pack(padx=20, pady=20)
 
+        # Show selected products
+        products_label = Label(container, text="Selected Products:", font="Arial 11 bold")
+        products_label.pack(fill=X, pady=(0, 10))
+
+        for item_id in selected_items:
+            item = self.tree.item(item_id)
+            product_name = item['values'][0]
+            product_label = Label(container, text=product_name, font="Arial 11")
+            product_label.pack(fill=X)
+
+        # Quantity input
         quantity_label = Label(container, text="Quantity:", font="Arial 11")
-        quantity_label.pack(fill=X)
+        quantity_label.pack(fill=X, pady=(10, 0))
 
         quantity_entry = Entry(container, font="Arial 11")
-        quantity_entry.pack(fill=X, pady=(0, 10))
+        quantity_entry.pack(fill=X, pady=(0, 20))
+
+        # Buttons frame
+        buttons_frame = Frame(container)
+        buttons_frame.pack(fill=X)
 
         def add_to_cart():
             try:
@@ -93,11 +120,13 @@ class SupplierDashboard:
 
                 for item_id in selected_items:
                     item = self.tree.item(item_id)
-                    values = item['values']
-                    product_name = values[0]
+                    product_name = item['values'][0]
 
                     # Find product in catalogue
                     product = next(p for p in self.cart.catalogue if p.name == product_name)
+
+                    if not product.has(quantity):
+                        raise InvalidQuantityException()
 
                     # Add to cart
                     order = Order(product, quantity, self.cart)
@@ -113,8 +142,11 @@ class SupplierDashboard:
             except InvalidQuantityException:
                 self.show_error(ErrorModel(InvalidQuantityException(), "Invalid quantity entered"))
 
-        confirm_button = Utils.Button(container, "Add to Cart", add_to_cart)
-        confirm_button.pack(fill=X)
+        add_button = Utils.Button(buttons_frame, "Add to Cart", add_to_cart)
+        add_button.pack(fill=X, pady=(0, 10))
+
+        cancel_button = Utils.Button(buttons_frame, "Back", dialog.destroy)
+        cancel_button.pack(fill=X)
 
         dialog.transient(self.root)
         dialog.grab_set()
@@ -123,15 +155,26 @@ class SupplierDashboard:
         cart_window = Toplevel(self.root)
         cart_window.title("Shopping Cart")
         cart_window.resizable(False, False)
+        cart_window.protocol("WM_DELETE_WINDOW", Utils.disable)
 
         container = Frame(cart_window)
         container.pack(padx=20, pady=20)
 
+        # Header
+        header = Utils.Label(container, "Your Shopping Cart")
+        header.pack(pady=(0, 20))
+
         # Cart items table
-        tree = ttk.Treeview(container, columns=("Product", "Quantity", "Cost"), show="headings")
+        columns = ("Product", "Quantity", "Cost")
+        tree = ttk.Treeview(container, columns=columns, show="headings")
         tree.heading("Product", text="Product")
         tree.heading("Quantity", text="Quantity")
         tree.heading("Cost", text="Cost")
+
+        tree.column("Product", width=200)
+        tree.column("Quantity", width=100)
+        tree.column("Cost", width=100)
+
         tree.pack(fill=X, pady=(0, 20))
 
         # Populate cart items
@@ -148,7 +191,7 @@ class SupplierDashboard:
                             font="Arial 11 bold")
         total_label.pack(pady=(0, 20))
 
-        # Buttons
+        # Buttons frame
         buttons_frame = Frame(container)
         buttons_frame.pack(fill=X)
 
@@ -160,8 +203,8 @@ class SupplierDashboard:
                                        lambda: self.checkout(cart_window))
         checkout_button.pack(fill=X, pady=(0, 10))
 
-        cancel_button = Utils.Button(buttons_frame, "Cancel", cart_window.destroy)
-        cancel_button.pack(fill=X)
+        back_button = Utils.Button(buttons_frame, "Back", cart_window.destroy)
+        back_button.pack(fill=X)
 
         cart_window.transient(self.root)
         cart_window.grab_set()
@@ -180,8 +223,7 @@ class SupplierDashboard:
             self.tree.insert("", END, values=(
                 order.product.name,
                 f"${order.product.price:.2f}",
-                order.product.stock,
-                "Yes" if order.product.is_available() else "No"
+                order.product.stock
             ))
 
             # Remove from cart tree
@@ -205,6 +247,7 @@ class SupplierDashboard:
         error_window = Toplevel(self.root)
         error_window.title("Error")
         error_window.resizable(False, False)
+        error_window.protocol("WM_DELETE_WINDOW", Utils.disable)
 
         container = Frame(error_window)
         container.pack(padx=20, pady=20)
@@ -212,8 +255,8 @@ class SupplierDashboard:
         message_label = Label(container, text=error_model.message, font="Arial 11")
         message_label.pack(pady=(0, 10))
 
-        ok_button = Utils.Button(container, "OK", error_window.destroy)
-        ok_button.pack(fill=X)
+        back_button = Utils.Button(container, "Back", error_window.destroy)
+        back_button.pack(fill=X)
 
         error_window.transient(self.root)
         error_window.grab_set()
@@ -222,3 +265,12 @@ class SupplierDashboard:
         self.root.destroy()
         from SupplierListWindow import SupplierListWindow
         SupplierListWindow()
+
+
+if __name__ == "__main__":
+    # For testing purposes
+    from Organisation import Organisation
+
+    org = Organisation()
+    supplier = org.suppliers.suppliers[0]
+    SupplierDashboard(supplier)
